@@ -1,0 +1,39 @@
+{
+  "faqs": [
+    {
+      "id": 1,
+      "question": "What are the admission requirements?",
+      "answer": "You need to have completed 12th grade with minimum 75% marks and pass the entrance exam.",
+      "category": "requirements",
+      "keywords": ["requirements", "eligibility", "criteria"]
+    },
+    {
+      "id": 2,
+      "question": "When is the admission deadline?",
+      "answer": "The admission deadline is March 31st, 2026.",
+      "category": "deadline",
+      "keywords": ["deadline", "last date", "timeline"]
+    },
+    {
+      "id": 3,
+      "question": "What is the application fee?",
+      "answer": "The application fee is $50 for domestic students and $100 for international students.",
+      "category": "fee",
+      "keywords": ["fee", "cost", "payment", "charge"]
+    },
+    {
+      "id": 4,
+      "question": "How do I apply online?",
+      "answer": "Visit our official website, create an account, fill the application form, and submit required documents.",
+      "category": "process",
+      "keywords": ["apply", "application", "process", "online"]
+    },
+    {
+      "id": 5,
+      "question": "What documents are required?",
+      "answer": "You need transcripts, ID proof, passport photo, and entrance exam scorecard.",
+      "category": "documents",
+      "keywords": ["documents", "papers", "certificates", "requirements"]
+    }
+  ]
+}

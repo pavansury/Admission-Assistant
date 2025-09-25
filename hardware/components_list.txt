@@ -1,0 +1,46 @@
+Admission Assistant - Hardware Components List
+=============================================
+
+MICROCONTROLLER:
+- Arduino Uno R3 or ESP32 (1x)
+- USB cable for programming
+
+AUDIO COMPONENTS:
+- Electret microphone module (1x)
+- Small speaker or buzzer (1x)
+- Audio amplifier module (optional) (1x)
+
+INPUT/OUTPUT:
+- Push button (1x)
+- LED (status indicator) (1x)
+- 220Ω resistor for LED (1x)
+- 10kΩ pull-up resistor for button (1x)
+
+CONNECTIVITY:
+- Breadboard or PCB (1x)
+- Jumper wires (male-to-male, male-to-female)
+- Headers/connectors as needed
+
+POWER SUPPLY:
+- 9V battery or power adapter (1x)
+- Power jack (1x)
+- Voltage regulator (if needed)
+
+OPTIONAL COMPONENTS:
+- LCD display 16x2 (for visual feedback)
+- SD card module (for local data storage)
+- WiFi module (if using Arduino Uno)
+- Real-time clock module
+
+ENCLOSURE:
+- Plastic project box
+- Mounting screws and standoffs
+- Labels for user interface
+
+TOOLS REQUIRED:
+- Soldering iron and solder
+- Wire strippers
+- Screwdrivers
+- Multimeter for testing
+
+ESTIMATED COST: $30-50 USD (depending on components chosen)
