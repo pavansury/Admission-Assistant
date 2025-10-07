@@ -6,3 +6,4 @@ pyttsx3==2.90
 SpeechRecognition==3.10.4
 # PyAudio often needs system libs; include optionally. If installation fails, user can skip or use another backend.
 PyAudio==0.2.14
+vosk==0.3.45

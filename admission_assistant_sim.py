@@ -12,7 +12,7 @@ Features:
 """
 
 from __future__ import annotations
-import json, csv, os, re, joblib, math, pathlib, argparse, sys, contextlib, io
+import json, csv, os, re, joblib, math, pathlib, argparse, sys, contextlib, io, time
 from datetime import datetime
 from typing import List, Dict, Optional
 
@@ -20,18 +20,26 @@ import pandas as pd  # still used for quick inspection / potential future analyt
 
 # --- Optional Audio Dependencies (STT / TTS) ---------------------------------
 try:
-    import speech_recognition as sr  # Speech-to-text
+    import speech_recognition as sr  # type: ignore  # Speech-to-text
     STT_AVAILABLE = True
 except Exception:  # broad import guard
-    sr = None
+    sr = None  # type: ignore
     STT_AVAILABLE = False
 
 try:
-    import pyttsx3  # Text-to-speech offline
+    import pyttsx3  # type: ignore  # Text-to-speech offline
     TTS_AVAILABLE = True
 except Exception:
-    pyttsx3 = None
+    pyttsx3 = None  # type: ignore
     TTS_AVAILABLE = False
+
+# Optional offline STT (Vosk) availability flag
+try:
+    import vosk  # type: ignore
+    VOSK_AVAILABLE = True
+except Exception:  # pragma: no cover - optional dep
+    vosk = None  # type: ignore
+    VOSK_AVAILABLE = False
 
 ROOT = pathlib.Path(__file__).resolve().parent
 PROJECT_ROOT = ROOT
@@ -84,6 +92,8 @@ class AdmissionAssistant:
         self.conversation_log: List[Dict] = []
         # Initialize TTS engine lazily
         self._tts_engine = None
+        # TTS configuration store (simple dict)
+        self._tts_config = {'rate': None, 'volume': None, 'voice_query': None, 'voice_index': None, 'slow': False}
 
     # --------------------------- Audio (TTS) ------------------------------- #
     def _ensure_tts(self):
@@ -91,29 +101,132 @@ class AdmissionAssistant:
             return False
         if self._tts_engine is None:
             try:
-                self._tts_engine = pyttsx3.init()
+                self._tts_engine = pyttsx3.init()  # type: ignore[attr-defined]
                 # Slightly slower rate for clarity
-                rate = self._tts_engine.getProperty('rate')
-                self._tts_engine.setProperty('rate', int(rate * 0.9))
+                rate = self._tts_engine.getProperty('rate')  # type: ignore[assignment]
+                self._tts_engine.setProperty('rate', int(rate * 0.9))  # type: ignore[attr-defined]
+                # Apply any deferred user config
+                self._apply_tts_config()
             except Exception:
                 self._tts_engine = None
         return self._tts_engine is not None
 
+    def _apply_tts_config(self):
+        if not self._tts_engine:
+            return
+        cfg = self._tts_config
+        try:
+            if cfg.get('rate') is not None:
+                self._tts_engine.setProperty('rate', int(cfg['rate']))  # type: ignore[attr-defined]
+            elif cfg.get('slow'):
+                # Apply stronger slowdown if slow flag without explicit rate
+                rate = self._tts_engine.getProperty('rate')  # type: ignore[attr-defined]
+                self._tts_engine.setProperty('rate', int(rate * 0.8))  # type: ignore[attr-defined]
+            if cfg.get('volume') is not None:
+                vol = max(0.0, min(1.0, float(cfg['volume'])))
+                self._tts_engine.setProperty('volume', vol)  # type: ignore[attr-defined]
+            if cfg.get('voice_query'):
+                q = cfg['voice_query'].lower()
+                voices = self._tts_engine.getProperty('voices')  # type: ignore[attr-defined]
+                chosen = None
+                for v in voices:
+                    # v.id and maybe v.name
+                    name = getattr(v, 'name', '') or ''
+                    if q in name.lower() or q in (getattr(v, 'id', '') or '').lower():
+                        chosen = v.id
+                        break
+                if chosen:
+                    self._tts_engine.setProperty('voice', chosen)  # type: ignore[attr-defined]
+            elif cfg.get('voice_index') is not None:
+                try:
+                    voices = self._tts_engine.getProperty('voices')  # type: ignore[attr-defined]
+                    idx = int(cfg['voice_index'])
+                    if 0 <= idx < len(voices):
+                        self._tts_engine.setProperty('voice', voices[idx].id)  # type: ignore[attr-defined]
+                except Exception:
+                    pass
+        except Exception:
+            pass
+
+    def configure_tts(self, rate: Optional[int] = None, volume: Optional[float] = None, voice_query: Optional[str] = None,
+                      voice_index: Optional[int] = None, slow: bool = False):
+        """Store user TTS configuration and apply if engine already initialized."""
+        if rate is not None:
+            self._tts_config['rate'] = rate
+        if volume is not None:
+            self._tts_config['volume'] = volume
+        if voice_query:
+            self._tts_config['voice_query'] = voice_query
+        if voice_index is not None:
+            self._tts_config['voice_index'] = voice_index
+        if slow:
+            self._tts_config['slow'] = True
+        # If engine already exists, apply immediately
+        if self._tts_engine:
+            self._apply_tts_config()
+
+    def list_voices(self):
+        if not TTS_AVAILABLE:
+            print("[TTS] pyttsx3 not available.")
+            return
+        try:
+            if not self._tts_engine:
+                self._tts_engine = pyttsx3.init()  # type: ignore[attr-defined]
+            voices = self._tts_engine.getProperty('voices')  # type: ignore[attr-defined]
+            print("Available voices:")
+            for idx, v in enumerate(voices):
+                attrs = []
+                for a in ('id','name','languages','age','gender'):
+                    val = getattr(v, a, None)
+                    if val:
+                        attrs.append(f"{a}={val}")
+                print(f"  [{idx}] " + ", ".join(attrs))
+        except Exception as e:
+            print(f"[TTS] Could not list voices: {e}")
+
     def speak(self, text: str):
         if self._ensure_tts():
             try:
-                self._tts_engine.say(text)
-                self._tts_engine.runAndWait()
+                for chunk in self._tts_chunks(self._prepare_tts_text(text)):
+                    self._tts_engine.say(chunk)  # type: ignore[attr-defined]
+                self._tts_engine.runAndWait()  # type: ignore[attr-defined]
             except Exception:
                 pass  # Fail silently if audio device not available
 
+    def _prepare_tts_text(self, text: str) -> str:
+        # Ensure sentence-final punctuation for clarity
+        if text and text[-1].isalnum():
+            text += '.'
+        # Collapse excessive whitespace
+        text = re.sub(r'\s+', ' ', text)
+        return text
+
+    def _tts_chunks(self, text: str, max_len: int = 180):
+        # Split by sentence boundaries first
+        sentences = re.split(r'(?<=[.!?]) +', text)
+        buf = ''
+        for s in sentences:
+            if not s:
+                continue
+            if len(buf) + len(s) + 1 <= max_len:
+                buf = (buf + ' ' + s).strip()
+            else:
+                if buf:
+                    yield buf
+                buf = s
+        if buf:
+            yield buf
+
     # --------------------------- Audio (STT) ------------------------------- #
-    def listen(self, timeout: float = 5.0, phrase_time_limit: float = 12.0, quiet: bool = False) -> Optional[str]:
+    def listen(self, timeout: float = 5.0, phrase_time_limit: float = 12.0, quiet: bool = False,
+               backend: str = 'auto', retries: int = 0) -> Optional[str]:
         if not STT_AVAILABLE:
             return None
-        recognizer = sr.Recognizer()
+        if not sr:  # runtime guard
+            return None
+        recognizer = sr.Recognizer()  # type: ignore
+        stderr_backup = sys.stderr
         try:
-            stderr_backup = sys.stderr
             null_f = None
             if quiet:
                 try:
@@ -121,21 +234,45 @@ class AdmissionAssistant:
                     sys.stderr = null_f  # suppress ALSA / JACK noise
                 except Exception:
                     pass
-            with sr.Microphone() as source:
+            with sr.Microphone() as source:  # type: ignore
                 print("🎤 (Listening... speak now)")
-                recognizer.adjust_for_ambient_noise(source, duration=0.6)
+                recognizer.adjust_for_ambient_noise(source, duration=0.6)  # type: ignore[arg-type]
                 audio = recognizer.listen(source, timeout=timeout, phrase_time_limit=phrase_time_limit)
             if quiet and null_f:
                 sys.stderr = stderr_backup
                 null_f.close()
-            try:
-                text = recognizer.recognize_google(audio)
-                print(f"📝 (You said): {text}")
-                return text
-            except sr.UnknownValueError:
-                print("⚠️  (Could not understand audio)")
-            except sr.RequestError as e:
-                print(f"⚠️  (STT request error: {e})")
+            # Decide backend order
+            if backend == 'google':
+                backend_order = ['google']
+            elif backend == 'vosk':
+                backend_order = ['vosk']
+            else:  # auto
+                backend_order = ['google', 'vosk'] if VOSK_AVAILABLE else ['google']
+            attempt = 0
+            while attempt <= retries:
+                for b in backend_order:
+                    try:
+                        if b == 'google':
+                            text = recognizer.recognize_google(audio)  # type: ignore[attr-defined]
+                        elif b == 'vosk' and VOSK_AVAILABLE:
+                            raw = recognizer.recognize_vosk(audio)  # type: ignore[attr-defined]
+                            # Vosk returns JSON or plain text depending on SR version
+                            try:
+                                data = json.loads(raw)
+                                text = data.get('text', '').strip()
+                            except Exception:
+                                text = raw.strip()
+                            if not text:
+                                raise sr.UnknownValueError()
+                        else:
+                            continue
+                        print(f"📝 (You said): {text}")
+                        return text
+                    except Exception:  # treat as UnknownValueError
+                        if attempt == retries and b == backend_order[-1]:
+                            print("⚠️  (Could not understand audio)")
+                    # No separate RequestError handling to avoid duplicate broad except
+                attempt += 1
         except Exception as e:
             print(f"⚠️  (Microphone error: {e})")
             # Restore stderr if suppressed
@@ -352,9 +489,37 @@ def main():
     parser.add_argument('--stt-timeout', type=float, default=5.0, help='Seconds to wait for speech start (default 5)')
     parser.add_argument('--stt-phrase-limit', type=float, default=12.0, help='Max seconds per utterance (default 12)')
     parser.add_argument('--quiet-audio', action='store_true', help='Suppress ALSA / JACK stderr noise during capture')
+    parser.add_argument('--stt-backend', choices=['auto', 'google', 'vosk'], default='auto', help='Preferred STT backend (default auto)')
+    parser.add_argument('--auto-retries', type=int, default=0, help='Automatic recognition retry attempts on failure')
+    parser.add_argument('--offline-stt-model', type=str, default='', help='Path to Vosk model directory (optional)')
+    # TTS clarity controls
+    parser.add_argument('--tts-rate', type=int, help='Set absolute TTS speech rate (words per minute approx)')
+    parser.add_argument('--tts-volume', type=float, help='Set TTS volume 0.0 - 1.0')
+    parser.add_argument('--tts-voice', type=str, help='Substring to select a TTS voice by name/id')
+    parser.add_argument('--list-voices', action='store_true', help='List available TTS voices and exit')
+    parser.add_argument('--tts-voice-index', type=int, help='Select TTS voice by numeric index (see --list-voices)')
+    parser.add_argument('--tts-slow', action='store_true', help='Enable slower, clearer speech pacing')
     args = parser.parse_args()
 
     assistant = AdmissionAssistant()
+    # Apply user TTS config before first use
+    assistant.configure_tts(rate=args.tts_rate, volume=args.tts_volume, voice_query=args.tts_voice,
+                            voice_index=args.tts_voice_index, slow=args.tts_slow)
+    if args.list_voices:
+        assistant.list_voices()
+        return
+
+    # Validate offline model if provided
+    if args.offline_stt_model:
+        if VOSK_AVAILABLE and os.path.isdir(args.offline_stt_model):
+            try:
+                if vosk:
+                    vosk.Model(args.offline_stt_model)  # type: ignore[attr-defined]
+                print(f"[VOSK] Offline model ready: {args.offline_stt_model}")
+            except Exception as e:
+                print(f"[VOSK] Failed to load offline model: {e}")
+        else:
+            print("[VOSK] Offline model path invalid or vosk not installed.")
 
     if args.voice:
         if not STT_AVAILABLE:
@@ -365,12 +530,19 @@ def main():
             while True:
                 query = None
                 if STT_AVAILABLE:
-                    query = assistant.listen(timeout=args.stt_timeout, phrase_time_limit=args.stt_phrase_limit, quiet=args.quiet_audio)
+                    query = assistant.listen(timeout=args.stt_timeout,
+                                             phrase_time_limit=args.stt_phrase_limit,
+                                             quiet=args.quiet_audio,
+                                             backend=args.stt_backend,
+                                             retries=args.auto_retries)
                 if not query:
                     # Allow manual fallback
                     user_typed = input("(Type instead or press Enter to retry mic) > ").strip()
                     if user_typed:
-                        query = user_typed
+                        if user_typed.lower() in {'instead'}:
+                            query = ''  # treat as control word meaning retry
+                        else:
+                            query = user_typed
                 if not query:
                     continue
                 if query.lower() in ['exit', 'quit', 'bye']:

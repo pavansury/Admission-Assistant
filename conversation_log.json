@@ -1,9 +1,23 @@
 [
   {
-    "timestamp": "2025-10-07T22:50:42.427079",
-    "user_query": "Application deadlines",
-    "response": "The admission deadline is March 31st, 2026.",
-    "intent": "deadline",
+    "timestamp": "2025-10-07T23:06:16.805891",
+    "user_query": "hello",
+    "response": "Hello! I'm your admission assistant. I can help you with information about admission requirements, deadlines, fees, application process, and required documents. What would you like to know?",
+    "intent": "process",
+    "confidence": 0.15136372180337374
+  },
+  {
+    "timestamp": "2025-10-07T23:06:32.528954",
+    "user_query": "required documents",
+    "response": "You need transcripts, ID proof, passport photo, and entrance exam scorecard.",
+    "intent": "documents",
+    "confidence": 1.0
+  },
+  {
+    "timestamp": "2025-10-07T23:06:44.235665",
+    "user_query": "application process",
+    "response": "Visit our official website, create an account, fill the application form, and submit required documents.",
+    "intent": "process",
     "confidence": 1.0
   }
 ]
