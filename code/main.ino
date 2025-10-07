@@ -1,10 +1,20 @@
 #include "config.h"
+#include "ml_model.h"
+#include "stt_module.h"
+#include "tts_module.h"
+#include "utils.h"
+#include "faq_responder.h"
 
 // Global variables
 bool isListening = false;
 bool isProcessing = false;
 String currentQuery = "";
 String currentResponse = "";
+
+// Modules
+AdmissionModel g_model;
+STTModule g_stt;
+TTSModule g_tts;
 
 // Function declarations
 void setupSystem();
@@ -23,6 +33,9 @@ void setup() {
   }
   
   initializeComponents();
+  g_model.begin();
+  g_stt.begin();
+  g_tts.begin(SPEAKER_PIN);
   setupSystem();
   
   Serial.println("System ready! Say 'Hello' to start...");
@@ -32,11 +45,8 @@ void loop() {
   handleUserInput();
   
   if (isListening) {
-    // Simulate speech-to-text processing
-    if (Serial.available()) {
-      currentQuery = Serial.readString();
-      currentQuery.trim();
-      
+    if (g_stt.available()) {
+      currentQuery = g_stt.readUtterance();
       if (currentQuery.length() > 0) {
         isListening = false;
         isProcessing = true;
@@ -97,44 +107,19 @@ void handleUserInput() {
 
 void processQuery(String query) {
   Serial.println("Processing query: " + query);
-  
-  // Simple keyword matching for demo
-  query.toLowerCase();
-  
-  if (query.indexOf("requirement") >= 0 || query.indexOf("eligibility") >= 0) {
-    currentResponse = "You need to have completed 12th grade with minimum 75% marks and pass the entrance exam.";
-  }
-  else if (query.indexOf("deadline") >= 0 || query.indexOf("last date") >= 0) {
-    currentResponse = "The admission deadline is March 31st, 2026.";
-  }
-  else if (query.indexOf("fee") >= 0 || query.indexOf("cost") >= 0) {
-    currentResponse = "The application fee is $50 for domestic students and $100 for international students.";
-  }
-  else if (query.indexOf("apply") >= 0 || query.indexOf("application") >= 0) {
-    currentResponse = "Visit our official website, create an account, fill the application form, and submit required documents.";
-  }
-  else if (query.indexOf("document") >= 0 || query.indexOf("paper") >= 0) {
-    currentResponse = "You need transcripts, ID proof, passport photo, and entrance exam scorecard.";
-  }
-  else if (query.indexOf("hello") >= 0 || query.indexOf("hi") >= 0) {
-    currentResponse = "Hello! I'm your admission assistant. How can I help you today?";
-  }
-  else {
-    currentResponse = "I'm sorry, I didn't understand your question. Please ask about admissions, requirements, deadlines, fees, or application process.";
+  ClassificationResult r = g_model.classify(query);
+  currentResponse = faqResponseForCategory(r.category);
+  if (DEBUG_MODE) {
+    Serial.print(F("[ML] Category: ")); Serial.print(r.category); Serial.print(F(" (confidence=")); Serial.print(r.confidence, 3); Serial.println(F(")"));
   }
 }
 
 void provideFeedback() {
-  Serial.println("\n🔊 Response: " + currentResponse);
+  g_tts.speak(currentResponse);
   Serial.println("\nPress the button and ask another question, or type 'exit' to quit.");
   
   // Blink LED to indicate response
-  for (int i = 0; i < 3; i++) {
-    digitalWrite(LED_PIN, LOW);
-    delay(200);
-    digitalWrite(LED_PIN, HIGH);
-    delay(200);
-  }
+  blinkLED(LED_PIN, 3, 200, 200);
   
   currentQuery = "";
   currentResponse = "";

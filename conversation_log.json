@@ -1,7 +1,44 @@
 [
   {
-    "timestamp": "2025-09-25T17:55:16.576294",
-    "user_query": "admission requirements",
-    "response": "I'm sorry, I didn't find specific information about that. Please ask about admission requirements, deadlines, application fees, application process, or required documents."
+    "timestamp": "2025-10-07T22:25:34.023398",
+    "user_query": "Application deadlines",
+    "response": "The admission deadline is March 31st, 2026.",
+    "intent": "deadline",
+    "confidence": 1.0
+  },
+  {
+    "timestamp": "2025-10-07T22:25:55.068989",
+    "user_query": "Application fees",
+    "response": "The application fee is $50 for domestic students and $100 for international students.",
+    "intent": "fee",
+    "confidence": 1.0
+  },
+  {
+    "timestamp": "2025-10-07T22:26:11.306790",
+    "user_query": "Application process",
+    "response": "Visit our official website, create an account, fill the application form, and submit required documents.",
+    "intent": "process",
+    "confidence": 1.0
+  },
+  {
+    "timestamp": "2025-10-07T22:26:41.287571",
+    "user_query": "Application process",
+    "response": "Visit our official website, create an account, fill the application form, and submit required documents.",
+    "intent": "process",
+    "confidence": 1.0
+  },
+  {
+    "timestamp": "2025-10-07T22:26:54.167555",
+    "user_query": "Programs",
+    "response": "We offer undergraduate programs in Engineering, Business, Arts, and Science.",
+    "intent": "programs",
+    "confidence": 1.0
+  },
+  {
+    "timestamp": "2025-10-07T22:27:13.655355",
+    "user_query": "Financial aid",
+    "response": "Yes, we offer scholarships based on merit and need. Contact the financial aid office for details.",
+    "intent": "financial_aid",
+    "confidence": 1.0
   }
 ]
