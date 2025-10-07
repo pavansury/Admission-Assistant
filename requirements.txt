@@ -2,3 +2,7 @@ pandas==2.2.2
 numpy==1.26.4
 scikit-learn==1.5.1
 joblib==1.4.2
+pyttsx3==2.90
+SpeechRecognition==3.10.4
+# PyAudio often needs system libs; include optionally. If installation fails, user can skip or use another backend.
+PyAudio==0.2.14

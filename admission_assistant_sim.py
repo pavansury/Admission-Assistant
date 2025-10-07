@@ -12,11 +12,26 @@ Features:
 """
 
 from __future__ import annotations
-import json, csv, os, re, joblib, math, pathlib
+import json, csv, os, re, joblib, math, pathlib, argparse
 from datetime import datetime
 from typing import List, Dict, Optional
 
 import pandas as pd  # still used for quick inspection / potential future analytics
+
+# --- Optional Audio Dependencies (STT / TTS) ---------------------------------
+try:
+    import speech_recognition as sr  # Speech-to-text
+    STT_AVAILABLE = True
+except Exception:  # broad import guard
+    sr = None
+    STT_AVAILABLE = False
+
+try:
+    import pyttsx3  # Text-to-speech offline
+    TTS_AVAILABLE = True
+except Exception:
+    pyttsx3 = None
+    TTS_AVAILABLE = False
 
 ROOT = pathlib.Path(__file__).resolve().parent
 PROJECT_ROOT = ROOT
@@ -67,6 +82,52 @@ class AdmissionAssistant:
         self.faq_records = self._load_faq_records()
         self.category_to_answer = self._build_category_answer_map()
         self.conversation_log: List[Dict] = []
+        # Initialize TTS engine lazily
+        self._tts_engine = None
+
+    # --------------------------- Audio (TTS) ------------------------------- #
+    def _ensure_tts(self):
+        if not TTS_AVAILABLE:
+            return False
+        if self._tts_engine is None:
+            try:
+                self._tts_engine = pyttsx3.init()
+                # Slightly slower rate for clarity
+                rate = self._tts_engine.getProperty('rate')
+                self._tts_engine.setProperty('rate', int(rate * 0.9))
+            except Exception:
+                self._tts_engine = None
+        return self._tts_engine is not None
+
+    def speak(self, text: str):
+        if self._ensure_tts():
+            try:
+                self._tts_engine.say(text)
+                self._tts_engine.runAndWait()
+            except Exception:
+                pass  # Fail silently if audio device not available
+
+    # --------------------------- Audio (STT) ------------------------------- #
+    def listen(self, timeout: float = 5.0, phrase_time_limit: float = 12.0) -> Optional[str]:
+        if not STT_AVAILABLE:
+            return None
+        recognizer = sr.Recognizer()
+        try:
+            with sr.Microphone() as source:
+                print("🎤 (Listening... speak now)")
+                recognizer.adjust_for_ambient_noise(source, duration=0.6)
+                audio = recognizer.listen(source, timeout=timeout, phrase_time_limit=phrase_time_limit)
+            try:
+                text = recognizer.recognize_google(audio)
+                print(f"📝 (You said): {text}")
+                return text
+            except sr.UnknownValueError:
+                print("⚠️  (Could not understand audio)")
+            except sr.RequestError as e:
+                print(f"⚠️  (STT request error: {e})")
+        except Exception as e:
+            print(f"⚠️  (Microphone error: {e})")
+        return None
 
     def _load_model_bundle(self):
         if MODEL_BUNDLE_PATH.exists():
@@ -253,6 +314,8 @@ class AdmissionAssistant:
                 
                 response = self.process_query(user_input)
                 print(f"🔊 Assistant: {response}\n")
+                # Speak response if TTS available
+                self.speak(response)
                 
             except KeyboardInterrupt:
                 print("\n\nGoodbye!")
@@ -265,11 +328,45 @@ class AdmissionAssistant:
         print(f"Conversation log saved to {filename}")
 
 def main():
+    parser = argparse.ArgumentParser(description="Admission Assistant Simulator")
+    parser.add_argument('--voice', action='store_true', help='Enable voice (STT + TTS) interaction loop')
+    parser.add_argument('--stt-only', action='store_true', help='Use microphone input but disable TTS output')
+    parser.add_argument('--tts-only', action='store_true', help='Use TTS for responses but keep text input')
+    parser.add_argument('--no-log', action='store_true', help='Do not write conversation log file')
+    args = parser.parse_args()
+
     assistant = AdmissionAssistant()
-    assistant.start_conversation()
-    
-    # Save conversation log
-    if assistant.conversation_log:
+
+    if args.voice:
+        if not STT_AVAILABLE:
+            print("⚠️  STT library not available (SpeechRecognition + PyAudio). Falling back to text mode.")
+        else:
+            print("🎧 Voice mode enabled. Press Ctrl+C to exit.")
+        try:
+            while True:
+                query = None
+                if STT_AVAILABLE:
+                    query = assistant.listen()
+                if not query:
+                    # Allow manual fallback
+                    user_typed = input("(Type instead or press Enter to retry mic) > ").strip()
+                    if user_typed:
+                        query = user_typed
+                if not query:
+                    continue
+                if query.lower() in ['exit', 'quit', 'bye']:
+                    break
+                response = assistant.process_query(query)
+                print(f"🔊 Assistant: {response}\n")
+                if (args.voice or args.tts_only) and not args.stt_only:
+                    assistant.speak(response)
+        except KeyboardInterrupt:
+            print("\nExiting voice session.")
+    else:
+        # Text-only conversation
+        assistant.start_conversation()
+
+    if assistant.conversation_log and not args.no_log:
         assistant.save_conversation_log()
 
 if __name__ == "__main__":
