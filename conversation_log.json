@@ -1,9 +1,9 @@
 [
   {
-    "timestamp": "2025-10-07T22:38:51.952852",
-    "user_query": "Schedule",
-    "response": "Classes for the new academic year start in September.",
-    "intent": "schedule",
+    "timestamp": "2025-10-07T22:50:42.427079",
+    "user_query": "Application deadlines",
+    "response": "The admission deadline is March 31st, 2026.",
+    "intent": "deadline",
     "confidence": 1.0
   }
 ]

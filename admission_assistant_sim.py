@@ -12,7 +12,7 @@ Features:
 """
 
 from __future__ import annotations
-import json, csv, os, re, joblib, math, pathlib, argparse
+import json, csv, os, re, joblib, math, pathlib, argparse, sys, contextlib, io
 from datetime import datetime
 from typing import List, Dict, Optional
 
@@ -108,15 +108,26 @@ class AdmissionAssistant:
                 pass  # Fail silently if audio device not available
 
     # --------------------------- Audio (STT) ------------------------------- #
-    def listen(self, timeout: float = 5.0, phrase_time_limit: float = 12.0) -> Optional[str]:
+    def listen(self, timeout: float = 5.0, phrase_time_limit: float = 12.0, quiet: bool = False) -> Optional[str]:
         if not STT_AVAILABLE:
             return None
         recognizer = sr.Recognizer()
         try:
+            stderr_backup = sys.stderr
+            null_f = None
+            if quiet:
+                try:
+                    null_f = open(os.devnull, 'w')
+                    sys.stderr = null_f  # suppress ALSA / JACK noise
+                except Exception:
+                    pass
             with sr.Microphone() as source:
                 print("🎤 (Listening... speak now)")
                 recognizer.adjust_for_ambient_noise(source, duration=0.6)
                 audio = recognizer.listen(source, timeout=timeout, phrase_time_limit=phrase_time_limit)
+            if quiet and null_f:
+                sys.stderr = stderr_backup
+                null_f.close()
             try:
                 text = recognizer.recognize_google(audio)
                 print(f"📝 (You said): {text}")
@@ -127,6 +138,11 @@ class AdmissionAssistant:
                 print(f"⚠️  (STT request error: {e})")
         except Exception as e:
             print(f"⚠️  (Microphone error: {e})")
+            # Restore stderr if suppressed
+            try:
+                sys.stderr = stderr_backup
+            except Exception:
+                pass
         return None
 
     def _load_model_bundle(self):
@@ -333,6 +349,9 @@ def main():
     parser.add_argument('--stt-only', action='store_true', help='Use microphone input but disable TTS output')
     parser.add_argument('--tts-only', action='store_true', help='Use TTS for responses but keep text input')
     parser.add_argument('--no-log', action='store_true', help='Do not write conversation log file')
+    parser.add_argument('--stt-timeout', type=float, default=5.0, help='Seconds to wait for speech start (default 5)')
+    parser.add_argument('--stt-phrase-limit', type=float, default=12.0, help='Max seconds per utterance (default 12)')
+    parser.add_argument('--quiet-audio', action='store_true', help='Suppress ALSA / JACK stderr noise during capture')
     args = parser.parse_args()
 
     assistant = AdmissionAssistant()
@@ -346,7 +365,7 @@ def main():
             while True:
                 query = None
                 if STT_AVAILABLE:
-                    query = assistant.listen()
+                    query = assistant.listen(timeout=args.stt_timeout, phrase_time_limit=args.stt_phrase_limit, quiet=args.quiet_audio)
                 if not query:
                     # Allow manual fallback
                     user_typed = input("(Type instead or press Enter to retry mic) > ").strip()
